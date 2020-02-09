@@ -1,0 +1,180 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>geomadi_graph</title>
+<!-- <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css"> -->
+<link rel="stylesheet" href="css/default.min.css">
+<link rel="stylesheet" href="css/modest.css">
+<link rel="stylesheet" type="text/css" media="print" href="css/print.css" />
+<link rel="stylesheet" type="text/css" href="css/markdown_custom.css" />
+<!-- <script src="http://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script> -->
+
+<script src="js/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-MML-AM_CHTML'></script>
+<script src='js/MathJax.js?config=TeX-MML-AM_CHTML'></script>
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script>
+  var link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.type = 'text/css';
+  link.href = window.location.search.match(/print-pdf/gi) ? 'css/pdf.css' : 'css/modest.css';
+  document.getElementsByTagName('head')[0].appendChild(link);
+ </script>
+
+
+</head>
+<body>
+    
+    <!-- <a style="margin-left:0px;" class="navbar-brand" href="index.html"><img src="f/logo.png" alt=""></a> -->
+<h1 id="building-a-graph">building a graph</h1>
+<p>We can download the street network from openstreetmap and the information are pretty detailed</p>
+<div class="figure">
+<img src="f_ops/graph_detail.png" title="graph detail" alt="graph_detail" />
+<p class="caption">graph_detail</p>
+</div>
+<p><em>detail of a graph</em></p>
+<p>We see a lot of different street types, depending on the mean of transportation we need to run some operation on the graph and reduce the number of edges keeping the correct distances.</p>
+<ul>
+<li>download the graph (berlin: 162k edges, 147k nodes) (643k segments, 526k nodes)</li>
+<li>select the routable street classes (32k, 30k)</li>
+<li>simplify the graph (24k, 23k)</li>
+<li>take the largest connected subgraph (17k, 11k)</li>
+<li>project the graph</li>
+<li>weight the graph</li>
+</ul>
+<p>depending on the mean of transportation we select only particular street classes</p>
+<div class="figure">
+<img src="f_ops/graph_fastSlow.png" title="graph fast slow" alt="graph by transportation" />
+<p class="caption">graph by transportation</p>
+</div>
+<p><em>different kind of graphs depending on the mean of transportation</em></p>
+<p>We build a graph from the geo dataframe</p>
+<div class="figure">
+<img src="f_ops/graph_type.png" title="graph type" alt="graph by type" />
+<p class="caption">graph by type</p>
+</div>
+<p><em>detail of a graph</em></p>
+<p>We label the nodes with geohash and depending on the digit used we have different number of nodes and connectivity</p>
+<table>
+<thead>
+<tr class="header">
+<th>digit</th>
+<th>node</th>
+<th>link</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>9</td>
+<td>10k</td>
+<td>22k</td>
+</tr>
+<tr class="even">
+<td>10</td>
+<td>24k</td>
+<td>29k</td>
+</tr>
+<tr class="odd">
+<td>13</td>
+<td>35k</td>
+<td>32k</td>
+</tr>
+</tbody>
+</table>
+<p>With low digit we complete distort the geometry, with high number of digits we lose connectivity</p>
+<div class="figure">
+<img src="f_ops/graph_digit.png" title="graph detail" alt="graph_digit" />
+<p class="caption">graph_digit</p>
+</div>
+<p><em>disconnected graph</em></p>
+<p>We realize that some parts are disconnected and therefore we take the largest connected graph</p>
+<div class="figure">
+<img src="f_ops/graph_disconnect.png" title="graph detail" alt="graph_detail" />
+<p class="caption">graph_detail</p>
+</div>
+<p><em>disconnected graph</em></p>
+<p>We weight taking in consideration speed, street class, and length. We apply a factor for each street type</p>
+<table>
+<thead>
+<tr class="header">
+<th>highway</th>
+<th>factor</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>motorway</td>
+<td>3</td>
+</tr>
+<tr class="even">
+<td>primary</td>
+<td>2</td>
+</tr>
+<tr class="odd">
+<td>secondary</td>
+<td>2</td>
+</tr>
+<tr class="even">
+<td>tertiary</td>
+<td>1.5</td>
+</tr>
+<tr class="odd">
+<td>residential</td>
+<td>0.5</td>
+</tr>
+</tbody>
+</table>
+<p>We can than weight a graph with this simple formula:</p>
+<p><br /><span class="math display">$$ \frac{speed * type}{length} $$</span><br /></p>
+<p>and obtain a weighted graph</p>
+<div class="figure">
+<img src="f_ops/graph_weight.png" title="weighting graph" alt="graph_weight" />
+<p class="caption">graph_weight</p>
+</div>
+<p><em>different weighting per street</em></p>
+<h2 id="calculating-distance-matrix">calculating distance matrix</h2>
+<p>We selected the closest node per each spot</p>
+<div class="figure">
+<img src="f_ops/graph_nearest.png" title="graph nearest" alt="graph_nearest" />
+<p class="caption">graph_nearest</p>
+</div>
+<p><em>closest node per spot (in red)</em></p>
+<p>The first iterations show not logical routes which is mainly due to the direct nature of the graph</p>
+<div class="figure">
+<img src="f_ops/graph_directed.png" title="graph directed" alt="graph_directed" />
+<p class="caption">graph_directed</p>
+</div>
+<p><em>shortest path between two spots in a directed graph</em></p>
+<p>A good directed graph is a lot of work and we by now use a undirected graph for reasonable routes</p>
+<div class="figure">
+<img src="f_ops/graph_undirected.png" title="graph nearest" alt="graph_nearest" />
+<p class="caption">graph_nearest</p>
+</div>
+<p><em>shortest path between two spots in a directed graph</em></p>
+<div class="figure">
+<img src="f_ops/graph_markov.png" title="graph markov" alt="graph_markov" />
+<p class="caption">graph_markov</p>
+</div>
+<p><em>changes in the Markov graph moving to weights</em></p>
+<p>We compare different graphs</p>
+<div class="figure">
+<img src="f_ops/asymmetry_matrix.png" alt="aymmetry_matrix" />
+<p class="caption">aymmetry_matrix</p>
+</div>
+<p><em>asymmetry matrix</em></p>
+<div class="figure">
+<img src="f_ops/asymmetry_distribution.png" alt="aymmetry_distribution" />
+<p class="caption">aymmetry_distribution</p>
+</div>
+<p><em>asymmetry distribution</em></p>
+</body></html>

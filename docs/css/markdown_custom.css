@@ -1,0 +1,149 @@
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:400,700);
+
+/* body { */
+/*   font-family: "Open Sans", Arial; */
+/*   background: #CCC; */
+/* } */
+/* main { */
+/*   background: #EEE; */
+/*   width: 600px; */
+/*   margin: 20px auto; */
+/*   padding: 10px 0; */
+/*   box-shadow: 0 3px 5px rgba(0,0,0,0.3); */
+/* } */
+/* h2 { */
+/*   text-align: center; */
+/* } */
+/* p { */
+/*   font-size: 13px; */
+/* } */
+input {
+  display: none;
+  visibility: hidden;
+}
+label {
+  display: block;
+  padding: 0.5em;
+  text-align: center;
+  border-bottom: 1px solid #CCC;
+  color: #666;
+}
+label:hover {
+  color: #000;
+}
+label::before {
+  font-family: Consolas, monaco, monospace;
+  font-weight: bold;
+  font-size: 15px;
+  content: "+";
+  vertical-align: text-top;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin-right: 3px;
+  background: radial-gradient(ellipse at center, #CCC 50%, transparent 50%);
+}
+#expand {
+  height: 0px;
+  overflow: hidden;
+  transition: height 0.5s;
+  background: url(http://placekitten.com/g/600/300);
+  color: #FFF;
+}
+section {
+  padding: 0 20px;
+}
+#toggle:checked ~ #expand {
+  height: 250px;
+}
+#toggle:checked ~ label::before {
+  content: "-";
+}
+.FAQ { 
+    display : block;
+    margin: 0px 0px 0px 70px;
+    vertical-align: top; 
+    height:auto !important; 
+}
+.list {
+    display:none; 
+    height:auto;
+    margin:0;
+    float: left;
+}
+.show {
+    display: none; 
+}
+.hide:target + .show {
+    display: inline; 
+}
+.hide:target {
+    display: none; 
+}
+.hide:target ~ .list {
+    display:inline; 
+}
+
+/*style the (+) and (-) */
+.hide, .show {
+	width: 30px;
+	height: 30px;
+	border-radius: 30px;
+	font-size: 20px;
+	color: #fff;
+	text-shadow: 0 1px 0 #666;
+	text-align: center;
+	text-decoration: none;
+	box-shadow: 1px 1px 2px #000;
+	background: #cccbbb;
+	opacity: .95;
+	margin-right: 0;
+	float: left;
+	margin-bottom: 25px;
+}
+
+.hide:hover, .show:hover {
+	color: #eee;
+	text-shadow: 0 0 1px #666;
+	text-decoration: none;
+	box-shadow: 0 0 4px #222 inset;
+	opacity: 1;
+	margin-bottom: 25px;
+}
+
+.list p{
+    height:auto;
+    margin:0;
+}
+.question {
+	float: left;
+	height: auto;
+	width: 90%;
+	line-height: 20px;
+	padding-left: 20px;
+	margin-bottom: 25px;
+	font-style: italic;
+}
+
+.collapsible {
+    background-color: #777;
+    color: white;
+    cursor: pointer;
+    padding: 18px;
+    width: 100%;
+    border: none;
+    text-align: left;
+    outline: none;
+    font-size: 15px;
+}
+
+.active, .collapsible:hover {
+    background-color: #555;
+}
+
+.content {
+    padding: 0 18px;
+    display: none;
+    overflow: hidden;
+    background-color: #f1f1f1;
+}
