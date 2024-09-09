@@ -1,0 +1,160 @@
+from keras.applications import VGG16
+from vis.utils import utils
+from keras import activations
+model = VGG16(weights='imagenet', include_top=True)
+layer_idx = utils.find_layer_idx(model, 'predictions')
+model.layers[layer_idx].activation = activations.linear
+model = utils.apply_modifications(model)
+from vis.utils import utils
+from matplotlib import pyplot as plt
+plt.rcParams['figure.figsize'] = (18, 6)
+img1 = utils.load_img(baseDir + 'tmp/ouzel1.jpg', target_size=(224, 224))
+img2 = utils.load_img(baseDir + 'tmp/ouzel2.jpg', target_size=(224, 224))
+f, ax = plt.subplots(1, 2)
+ax[0].imshow(img1)
+ax[1].imshow(img2)
+plt.show()
+
+from vis.visualization import visualize_saliency, overlay
+from vis.utils import utils
+from keras import activations
+layer_idx = utils.find_layer_idx(model, 'predictions')
+f, ax = plt.subplots(1, 2)
+for i, img in enumerate([img1, img2]):    
+    grads = visualize_saliency(model, layer_idx, filter_indices=20, seed_input=img)
+    ax[i].imshow(grads, cmap='jet')
+plt.show()
+
+import numpy as np
+import matplotlib.cm as cm
+from vis.visualization import visualize_cam
+
+for modifier in [None, 'guided', 'relu']:
+    plt.figure()
+    f, ax = plt.subplots(1, 2)
+    plt.suptitle("vanilla" if modifier is None else modifier)
+    for i, img in enumerate([img1, img2]):    
+        grads = visualize_cam(model, layer_idx, filter_indices=20,seed_input=img, backprop_modifier=modifier)        
+        jet_heatmap = np.uint8(cm.jet(grads)[..., :3] * 255)
+        #ax[i].imshow(overlay(jet_heatmap, img))
+        ax[i].imshow(overlay(grads, img))
+    plt.show()
+
+plt.imshow(grads)
+plt.show()
+j = jet_heatmap[:,:,:,1]
+plt.imshow(j)
+plt.show()
+
+
+from vis.visualization import visualize_activation
+from vis.utils import utils
+from keras import activations
+
+from matplotlib import pyplot as plt
+%matplotlib inline
+plt.rcParams['figure.figsize'] = (18, 6)
+layer_idx = utils.find_layer_idx(model, 'preds')
+model.layers[layer_idx].activation = activations.linear
+model = utils.apply_modifications(model)
+filter_idx = 0
+img = visualize_activation(model, layer_idx, filter_indices=filter_idx)
+plt.imshow(img[..., 0])
+plt.show()
+
+import numpy as np
+import keras
+import json
+
+from keras.datasets import mnist
+from keras.models import Sequential, Model
+from keras.layers import Dense, Dropout, Flatten, Activation, Input
+from keras.layers import Conv2D, MaxPooling2D
+from keras import backend as K
+from keras.models import model_from_json
+
+batch_size = 128
+num_classes = 10
+epochs = 5
+
+img_rows, img_cols = 28, 28
+
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+if K.image_data_format() == 'channels_first':
+    x_train = x_train.reshape(x_train.shape[0], 1, img_rows, img_cols)
+    x_test = x_test.reshape(x_test.shape[0], 1, img_rows, img_cols)
+    input_shape = (1, img_rows, img_cols)
+else:
+    x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
+    x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
+    input_shape = (img_rows, img_cols, 1)
+
+x_train = x_train.astype('float32')
+x_test = x_test.astype('float32')
+x_train /= 255
+x_test /= 255
+print('x_train shape:', x_train.shape)
+print(x_train.shape[0], 'train samples')
+print(x_test.shape[0], 'test samples')
+
+y_train = keras.utils.to_categorical(y_train, num_classes)
+y_test = keras.utils.to_categorical(y_test, num_classes)
+
+if False:
+    model = Sequential()
+    model.add(Conv2D(32, kernel_size=(3, 3),activation='relu',input_shape=input_shape))
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+    model.add(Flatten())
+    model.add(Dense(128, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(num_classes, activation='softmax', name='preds'))
+    model.compile(loss=keras.losses.categorical_crossentropy,optimizer=keras.optimizers.Adam(),metrics=['accuracy'])
+    model.fit(x_train, y_train,batch_size=batch_size,epochs=1,verbose=1,validation_data=(x_test, y_test))
+    version = "mnist"
+    custD = "bast"
+    json.dump(model.to_json(),open(baseDir+"train/"+custD+"/"+version+".json","w"))
+    model.save_weights(baseDir + "train/"+custD+"/"+version+".h5")
+else:
+    json_file = open(baseDir+"train/"+custD+"/"+version+".json",'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    model = model_from_json(loaded_model_json)
+    
+score = model.evaluate(x_test,y_test,verbose=0)
+print('Test loss:', score[0])
+print('Test accuracy:', score[1])
+class_idx = 0
+indices = np.where(y_test[:, class_idx] == 1.)[0]
+
+idx = indices[0]
+from matplotlib import pyplot as plt
+plt.rcParams['figure.figsize'] = (18, 6)
+plt.imshow(x_test[idx][..., 0])
+plt.show()
+
+from vis.visualization import visualize_saliency
+from vis.utils import utils
+from keras import activations
+
+layer_idx = utils.find_layer_idx(model,'preds')
+model.layers[layer_idx].activation = activations.linear
+model = utils.apply_modifications(model)
+grads = visualize_saliency(model,layer_idx,filter_indices=class_idx,seed_input=x_test[idx])
+plt.imshow(grads,cmap='jet')
+plt.show()
+
+for modifier in ['guided', 'relu']:
+    grads = visualize_saliency(model, layer_idx, filter_indices=class_idx,seed_input=x_test[idx], backprop_modifier=modifier)
+    plt.figure()
+    plt.title(modifier)
+    plt.imshow(grads, cmap='jet')
+plt.show()
+
+
+grads = visualize_saliency(model, layer_idx, filter_indices=class_idx, seed_input=x_test[idx], 
+                           backprop_modifier='guided', grad_modifier='negate')
+plt.imshow(grads, cmap='jet')
+plt.show()

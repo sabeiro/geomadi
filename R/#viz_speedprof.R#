@@ -1,0 +1,118 @@
+#!/usr/bin/env Rscript
+setwd('~/lav/motion/')
+source('src/R/graphEnv.R')
+
+#select * from tile_count_daily_hours_sum_20170924 where tile_id=5883827;
+fs1 <- read.csv("raw/speed_prof1.csv",stringsAsFactor=F)
+#select tile_id, ts_start, east_out, east_out_speed, north_out, north_out_speed, south_out, south_out_speed, west_out, west_out_speed from tile_direction_daily_hours_sum_20170924 where tile_id=5883827;
+fs2 <- read.csv("raw/speed_prof2.csv",stringsAsFactor=F)
+if(TRUE){
+    fs2 <- read.csv("out/telia_dir_loc213.csv",stringsAsFactor=F)
+    fs2 <- read.csv("out/telia_dir_loc122.csv",stringsAsFactor=F)
+    fs2 <- read.csv("out/telia_dir_loc117.csv",stringsAsFactor=F)
+    fs2 <- read.csv("out/telia_dir_loc118.csv",stringsAsFactor=F)
+    fs2$version = "v5"
+    fs2$version[fs2$fromDateTime > 1506816000000/1000] = "v6"
+    fs2$tile_id = 213
+    fs2$hour = format(as.POSIXct(fs2$fromDateTime,origin="1970-01-01",tz="GMT"),"%H")
+    fs2$day = format(as.POSIXct(fs2$fromDateTime,origin="1970-01-01",tz="GMT"),"%Y-%m-%d")
+    fs2$ts_start = fs2$fromDateTime
+    fs2$ts_end = fs2$toDateTime
+}
+## as.POSIXct(fs2$fromDateTime,origin="1970-01-01",tz="GMT") 
+## new Date("2017-10-01").getTime()
+
+fs1$day <- substring(fs1$ts_start,2,11)
+fs1$hour <- substring(fs1$ts_start,13,14)
+fs1$sig <- fs1$all_events_sum
+fs1$grp <- paste(fs1$tile_id,fs1$day)
+fs1$tile_id <- as.factor(fs1$tile_id)
+
+gLabel = c("hour","activities",paste("activity count per hour"),"shape","convexity")
+p <- ggplot(fs1,aes(x=hour,y=sig,group=grp,color=tile_id)) +
+    geom_line(alpha=.3,size=1.1) +
+    theme(legend.position="bottom",
+          text = element_text(size = gFontSize)) + 
+    scale_color_manual(values=gCol1) +
+    labs(x=gLabel[1],y=gLabel[2],title=gLabel[3],fill=gLabel[4],color=gLabel[4],linetype=gLabel[5])
+p
+
+gLabel = c("version","activities",paste("activity count per hour"),"version","convexity")
+p <- ggplot(fs1,aes(x=version,y=sig,color=version)) +
+    geom_boxplot(alpha=.3,size=1.1) +
+    geom_violin(alpha=.5) + 
+    geom_jitter(alpha=.3) + 
+    theme(legend.position="bottom",
+          text = element_text(size = gFontSize)) + 
+    scale_color_manual(values=gCol1) +
+    labs(x=gLabel[1],y=gLabel[2],title=gLabel[3],fill=gLabel[4],color=gLabel[4],linetype=gLabel[5])
+p
+
+
+fs2 %>% head
+fs2$day <- substring(fs2$ts_start,2,11)
+fs2$hour <- substring(fs2$ts_start,13,14)
+fs2$grp <- paste(fs2$tile_id,fs2$day)
+fs2$tile_id <- as.factor(fs2$tile_id)
+
+if(TRUE){
+    melted <- melt(fs2[,c("tile_id","east_out_speed","west_out_speed","north_out_speed","south_out_speed","east_in_speed","west_in_speed","north_in_speed","south_in_speed","version","day","hour")],id.vars=c("tile_id","version","day","hour"))
+}
+if(FALSE){
+    melted <- melt(fs2[,c("tile_id","east_out","west_out","north_out","south_out","east_in","west_in","north_in","south_in","version","day","hour")],id.vars=c("tile_id","version","day","hour"))
+}
+
+melted$dir = "out"
+melted[grepl("in",melted$variable),"dir"] = "in"
+melted$variable <- melted$variable %>% gsub("_out_speed","",.) %>% gsub("_in_speed","",.) 
+melted$variable <- melted$variable %>% gsub("_out","",.) %>% gsub("_in","",.) 
+melted$variable <- factor(melted$variable,levels=c("north","east","south","west"))
+##melted <- melted[melted$variable!="west",]
+#melted = melted[melted$value > 0,]
+melted$version <- as.factor(melted$version)
+velM <- ddply(melted,.(variable,version,dir),summarise,mean=mean(value,na.rm=T),std=sd(value,na.rm=T))
+con <- pipe("xclip -selection clipboard -i", open="w")
+write.table(velM,con,row.names=F,col.names=F,sep=",")
+close(con)
+velM$y = velM$mean
+velM$y[velM$dir=="in"] = velM$y[velM$dir=="in"]*1.2
+
+gLabel = c("version","speed",paste("speed density"),"version","convexity")
+gLabel = c("version","count",paste("count density"),"version","convexity")
+p = ggplot(melted,aes(x=variable,y=value,group=variable)) + 
+    geom_jitter(aes(color=dir,fill=variable),alpha=0.4,size=1) +
+#    geom_boxplot(aes(y=value,fill=variable),alpha=0.4,size=1) +
+    RadarTheme +
+    geom_text(data=velM,aes(x=variable,y=y,label=paste(round(mean),"±",round(std))),color="black",size=5) + 
+    theme(axis.text.x=element_text(angle=0, hjust=1)) + 
+    coord_radar() +
+#    scale_y_continuous(limits=c(0,1.)) +
+    guides(fill=guide_legend(keywidth=rel(1.3),keyheight=rel(1.3))) +
+    facet_grid(. ~ version) +
+    scale_color_manual(values=gCol1[seq(1,10,3)]) +
+    labs(x=gLabel[1],y=gLabel[2],title=gLabel[3],fill=gLabel[4],color=gLabel[4],linetype=gLabel[5])
+p
+
+
+gLabel = c("speed","density",paste("speed density"),"version","convexity")
+p <- ggplot(melted,aes(x=value,color=version)) +
+    geom_density(alpha=.5) + 
+    theme(legend.position="bottom",
+          text = element_text(size = gFontSize)) + 
+    scale_color_manual(values=gCol1) +
+    labs(x=gLabel[1],y=gLabel[2],title=gLabel[3],fill=gLabel[4],color=gLabel[4],linetype=gLabel[5])
+p
+
+gLabel = c("version","speed",paste("speed density"),"version","convexity")
+p <- ggplot(melted,aes(x=version,y=value,color=version)) +
+    geom_boxplot(alpha=.3,size=1.1) +
+    geom_violin(alpha=.5) +
+    geom_jitter(alpha=.3) + 
+    theme(legend.position="bottom",
+          text = element_text(size = gFontSize)) + 
+    scale_color_manual(values=gCol1) +
+    labs(x=gLabel[1],y=gLabel[2],title=gLabel[3],fill=gLabel[4],color=gLabel[4],linetype=gLabel[5])
+p
+
+
+

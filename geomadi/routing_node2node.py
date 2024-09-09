@@ -1,31 +1,26 @@
 import sys
-
 import networkx as nx
 import osmnx as ox
-
 import pandas as pd
 import multiprocessing
 from datetime import datetime
-
+import geomadi.graph_ops as g_p
 
 def plog(labS):
     print(labS)
-
 
 def worker():
     """worker function"""
     print('Worker')
     return
 
-
 # get nearest node, if actual node is not in the graph
-def getNearestNode(nodeid, plz_df):
-    coord_x = plz_df.loc[plz_df['nearest_graph_node'] == str(nodeid)]['X'].item()
-    coord_y = plz_df.loc[plz_df['nearest_graph_node'] == str(nodeid)]['Y'].item()
+def getNearestNode(nodeid, nodeL):
+    coord_x = nodeL.loc[nodeL['osmid'] == nodeid]['x'].item()
+    coord_y = nodeL.loc[nodeL['osmid'] == nodeid]['y'].item()
     coords = (coord_x, coord_y)
     nearest_node = ox.get_nearest_node(graph, coords, method='euclidean')
     return nearest_node
-
 
 def progress(count, total, status='', delta_time=0):  # progressbar
     bar_len = 60
@@ -36,13 +31,14 @@ def progress(count, total, status='', delta_time=0):  # progressbar
     sys.stdout.flush()
 
 
-def calcRoute(graph, start_node, start_zip, dest_list, plz_df):
-    try:  # calculate the route from the OSM node to all nodes in the network
+def calcRoute(graph, start_node, dest_list):
+    """calculate the route from the OSM node to all nodes in the network"""
+    try:  
         routes_dij = nx.single_source_dijkstra_path(G=graph, source=start_node, weight='weight')
         ##route = nx.shortest_path(graph, origin_node, destination_node, weight='weight')
     except:
         print("Start node " + str(start_node) + " not found")
-        nearest_node = getNearestNode(start_node, plz_df)
+        nearest_node = getNearestNode(start_node, nodeL)
         print("Using nearest node instead, nodeid: " + str(nearest_node))
         routes_dij = nx.single_source_dijkstra_path(G=graph, source=nearest_node, weight='weight')
 
@@ -57,44 +53,30 @@ def calcRoute(graph, start_node, start_zip, dest_list, plz_df):
         trunk_length = 0
         primary_length = 0
         secondary_length = 0
-        first_junction = 0
-        first_flag = False
-        last_junction = 0
         for i in range(len(route[1]) - 1):
             edgeData = graph.get_edge_data(route[1][i], route[1][i + 1])
-            length = length + round(edgeData[0].get('length') / 1000.)
+            try:
+                length = length + edgeData[0].get('length') / 1000.
+            except:
+                continue
             edgeType = edgeData[0].get('highway')
-            segDist = round(edgeData[0].get('length') / 1000.)
-            if edgeType == "motorway_link":
-                last_junction = route[1][i]
-                if not first_flag:
-                    first_junction = route[1][i]
-                    first_flag = True
-            if edgeType in ('motorway', 'motorway_link'):
-                motorway_length = motorway_length + segDist
-            elif edgeType in ('trunk', 'trunk_link'):
+            segDist = edgeData[0].get('length') / 1000.
+            if edgeType in ('trunk', 'trunk_link'):
                 trunk_length = trunk_length + segDist
             elif edgeType in ('primary', 'primary_link'):
                 primary_length = primary_length + segDist
             elif edgeType in ('secondary', 'secondary_link'):
                 secondary_length = secondary_length + segDist
-        routeL.append(
-            [route[0], length, motorway_length, primary_length, secondary_length, first_junction, last_junction])
-
-    routeL = pd.DataFrame(routeL, columns=["end", "length", "motorway_length", "primary_length", "secondary_length",
-                                           "first_junction", "last_junction"])
-    routeL.loc[:, "start_zip"] = start_zip
-    routeL.loc[:, "end_zip"] = pd.merge(routeL, plz_df, left_on="end", right_on='nearest_graph_node', how="left")['PLZ']
-    del routeL['end']
-    print('wrote node: ' + str(start_node))
+            elif edgeType in ('motorway', 'motorway_link'):
+                motorway_length = motorway_length + segDist
+        n_edge = len(route[1]) - 1
+        routeL.append([route[0], length, motorway_length, primary_length, secondary_length, n_edge])
+    routeL = pd.DataFrame(routeL, columns=["end","length","motorway_length","primary_length","secondary_length","n_edge"]) 
     return routeL
 
 
-if __name__ == '__main__':
-    plog("------------------------load-map--------------------------------")
+def routeList(graph, nodeL):
     start_time = datetime.now()
-    ##graph1 = ox.load_graphml(filename="routes_germany.graphml",folder=baseDir+"gis/graph/")
-    graph = ox.load_graphml(filename="allGermany_allstreetsUntilSec_proj.graphml", folder=baseDir + "gis/graph/")
     plog("-----------------------undirect-graph---------------------------")
     graph = graph.to_undirected()
     for edge in graph.edges():
@@ -104,14 +86,8 @@ if __name__ == '__main__':
             if x.get('highway') == 'motorway':
                 weight = 1
             graph[edge[0]][edge[1]][i]["weight"] = weight
-    plz_df = pd.read_csv(baseDir + 'gis/graph/zip_node.csv')
-    start_list = plz_df['nearest_graph_node'].tolist()
-    start_list = list(map(int, start_list))
-    dest_list = start_list
-    df = pd.DataFrame(
-        columns=['distance', 'motorway_distance', 'primary_distance', 'secondary_distance', 'first_junction',
-                 'last_junction', 'start_zip', 'end_zip'])
-    df.to_csv(baseDir + "gis/graph/zip2zip.csv", index=False)
+    start_list = list(nodeL['osmid'])
+    dest_list = list(nodeL['osmid'])
     plog("------------------------start-routing-------------------------")
     jobs = []
     for i in range(5):
@@ -119,21 +95,23 @@ if __name__ == '__main__':
         jobs.append(p)
         p.start()
     # pool = Pool(6)
-    # segments = [(stations_with_coords, cilacs_map, id_cilac_map, start_index) for start_index in range(0, len(stations_with_coords), BUFFER)]
-    # cell_map_distance = pool.map(get_cilacs_to_segment, segments)
-
-    for count, start in plz_df.iterrows():
+    routeD = []
+    for count, start in nodeL.iterrows():
         end_time = datetime.now()
         delta_time = int((end_time - start_time).total_seconds()) / 3600.
         progress(count, len(start_list), status='', delta_time=delta_time)
-        start_node = int(start['nearest_graph_node'])
-        start_zip = int(start['PLZ'])
-        routeL = calcRoute(graph, start_node, start_zip, dest_list, plz_df)
-        routeL.to_csv(baseDir + "gis/graph/zip2zip.csv", mode="a", index=False, header=False)
+        start_node = start['osmid']
+        route = calcRoute(graph, start_node, dest_list)
+        route = pd.merge(route, nodeL, left_on="end", right_on='osmid', how="left")
+        if len(route) == 0:
+            continue
+        route.loc[:,"octree8_start"] = start['octree8']
+        routeL = route[['octree8_start','octree8','length','motorway_length','primary_length','secondary_length','n_edge']]
+        routeD.append(routeL)
 
     print('origins: ' + str(len(start_list)))
     print('time:    ' + str(delta_time))
     print('origins per sec: ' + str(delta_time / len(start_list)))
     print('rel:     ' + str((len(start_list) * (len(start_list)))))
     print('rel per sec: ' + str(delta_time / (len(start_list) * (len(start_list)))))
-    print('-----------------te-se-qe-te-ve-be-te-ne------------------------')
+    return pd.concat(routeD)

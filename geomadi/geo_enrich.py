@@ -4,7 +4,7 @@ enrich poi information with additional geographical information
 """
 
 import math
-
+import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -15,10 +15,11 @@ import shapely as sh
 import shapely.speedups
 from scipy.cluster.hierarchy import fcluster
 from scipy.cluster.hierarchy import linkage
+from sklearn.cluster import KMeans, AgglomerativeClustering
 from shapely.geometry import Point
+from scipy.spatial import cKDTree
 
 shapely.speedups.enable()
-
 
 def addRegion(poi, regionF, field="GEN"):
     """assign a region to the poi"""
@@ -34,14 +35,28 @@ def addRegion(poi, regionF, field="GEN"):
     return poi['region']
 
 
-def addZone(poi, max_d):
+def addZone(poi, max_dist):
     """assign a zone to the poi, clustering"""
     Z = linkage(poi[['x', 'y']], 'ward')
-    zoneL = fcluster(Z, max_d, criterion='distance')
+    zoneL = fcluster(Z, max_dist, criterion='distance')
     # newZone = np.isnan(poi['id_zone'])
     return zoneL
 
+def clusterPoi(poi,n_cluster):
+    """cluster the POIs according to distance"""
+    kmeans = KMeans(n_clusters=5)
+    kclass = kmeans.fit(poi[['x','y']])
+    return kclass.labels_
 
+def nearestPoi(gdA, gdB):
+    nA = np.array(list(gdA.geometry.apply(lambda x: (x.x, x.y))))
+    nB = np.array(list(gdB.geometry.apply(lambda x: (x.x, x.y))))
+    btree = cKDTree(nB)
+    dist, idx = btree.query(nA, k=1)
+    gdB_nearest = gdB.iloc[idx].drop(columns="geometry").reset_index(drop=True)
+    gdf = pd.concat([gdA.reset_index(drop=True),gdB_nearest,pd.Series(dist,name='dist')],axis=1)
+    return gdf, idx
+    
 def interp2D(dens, x1, y1, z_col="Einwohner"):
     """ interpolate 2D densities and returns centroid value"""
     x = [x.centroid.x for x in dens.geometry]

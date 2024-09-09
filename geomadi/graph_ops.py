@@ -1,11 +1,9 @@
-import gzip
-import json
-import sys
-
+import gzip, json, sys
 import networkx as nx
 import numpy as np
 import osmnx as ox
 import pandas as pd
+import geopandas as gpd
 import requests
 import scipy as sp
 
@@ -44,16 +42,18 @@ def removeType(G, move_type="driver"):
     """remove fclass types"""
     print("set move type %s" % (move_type))
     l = list(G.edges(data=True))
-    tL, n = np.unique([x[2]['highway'] for x in l], return_counts=True)
+    sL = [x[2]['highway'] for x in l]
+    sL = [x for x in sL if isinstance(x,str)]
+    tL, n = np.unique(sL, return_counts=True)
     tL = ['cycleway', 'footway', 'living_street', 'motorway', 'motorway_link', 'path', 'pedestrian', 'primary',
           'residential', 'secondary', 'secondary_link', 'service', 'steps', 'tertiary', 'track', 'track_grade1',
           'track_grade3', 'trunk', 'trunk_link', 'unclassified']
     if move_type == "pedestrian":
-        tL = ['cycleway', 'footway', 'living_street', 'path', 'pedestrian', 'residential', 'primary', 'secondary',
-              'secondary_link', 'tertiary', 'trunk', 'trunk_link']
+        tL = ['cycleway','footway','living_street','path','pedestrian','residential','primary','secondary','secondary_link','tertiary','trunk','trunk_link']
+    if move_type == "cycle":
+        tL = ['cycleway','living_street','path','residential','secondary','secondary_link','tertiary','trunk','trunk_link']
     if move_type == "driver":
-        tL = ['living_street', 'motorway', 'motorway_link', 'primary', 'residential', 'secondary', 'secondary_link',
-              'tertiary', 'trunk', 'trunk_link']
+        tL = ['living_street','motorway','motorway_link', 'primary', 'residential', 'secondary', 'secondary_link','tertiary', 'trunk', 'trunk_link']
     G1 = G.copy()
     G1.graph['crs'] = {'init': 'epsg:4326'}
     G1.graph['name'] = move_type + " network"
@@ -266,19 +266,26 @@ def progress(count, total, status='', delta_time=0, completion=1.):
 
 
 def save(G, fName):
-    """suggest different file formats"""
-    nx.write_gml(G, fName + ".gml")
-    # G = nx.read_gml(fName+".gml")
+    """save in different file formats"""
+    #nx.write_gml(G, fName + ".gml")
+    ox.io.save_graph_geopackage(G,fName + ".gpkg")
     if False:
         ox.save_graphml(G, filename=fName, folder=baseDir + "gis/graph/")
         ox.save_gdf_shapefile(graph, filename=fName + ".gdf", folder=baseDir + "gis/graph/")
         ox.save_graphml(G, filename=gName, folder=baseDir + "gis/graph/")
-        G = ox.load_graphml(filename=gName, folder=baseDir + "gis/graph/")
+        ox.save_graph_shapefile(G,filename=fName,filepath=baseDir + "gis/graph/")
         ox.save_gdf_shapefile(G, filename=fName + ".gdf", folder=baseDir + "gis/graph/")
-        G = ox.load_graphml(filename=fName + ".gdf", folder=baseDir + "gis/graph/")
         nx.readwrite.write_shp(G, baseDir + "gis/graph/berlin_street")
         nx.write_graphml_lxml(G, baseDir + "fName" + ".graphml")
 
+def load(fName):
+    """load graph"""
+    gdf_nodes = gpd.read_file(fName, layer='nodes').set_index('osmid')
+    gdf_edges = gpd.read_file(fName, layer='edges').set_index(['u', 'v', 'key'])
+    assert gdf_nodes.index.is_unique and gdf_edges.index.is_unique
+    graph_attrs = {'crs': 'epsg:4326', 'simplified': True}
+    G = ox.graph_from_gdfs(gdf_nodes, gdf_edges, graph_attrs)
+    return G
 
 def saveJson(G, fName, indent=0):
     """save a simple json"""
